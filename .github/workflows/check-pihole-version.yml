@@ -1,0 +1,87 @@
+name: Check for Pi-hole Update
+
+on:
+  schedule:
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-update:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_NAME: pihole/pihole
+
+    steps:
+      - name: Checkout your fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get latest Docker tag
+        id: latest
+        run: |
+          LATEST_TAG=$(curl -s https://registry.hub.docker.com/v1/repositories/${{ env.IMAGE_NAME }}/tags | jq -r '.[].name' | sort -V | grep -vE '.*(dev|beta|rc).*' | tail -n 1)
+          echo "Latest tag: $LATEST_TAG"
+          echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+
+      - name: Get current tag from VERSION file
+        id: current
+        run: |
+          CURRENT_TAG=$(cat Apps/pihole-unbound/VERSION | tr -d '\n')
+          echo "Current tag: $CURRENT_TAG"
+          echo "tag=$CURRENT_TAG" >> $GITHUB_OUTPUT
+
+      - name: Compare versions
+        id: compare
+        run: |
+          if [ "${{ steps.latest.outputs.tag }}" != "${{ steps.current.outputs.tag }}" ]; then
+            echo "New version available"
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+          else
+            echo "No update needed"
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+
+      - name: Exit if no update needed
+        if: steps.compare.outputs.update_needed == 'false'
+        run: exit 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      - name: Add upstream and sync main
+        run: |
+          git remote add upstream https://github.com/bigbeartechworld/big-bear-docker-images.git
+          git fetch upstream
+          git checkout main
+          git merge upstream/main || echo "Nothing to merge"
+
+      - name: Create new branch and update version in files
+        id: set_branch
+        run: |
+          BRANCH="update-pihole-${{ steps.latest.outputs.tag }}"
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
+          git checkout -b $BRANCH
+
+          echo "${{ steps.latest.outputs.tag }}" > Apps/pihole-unbound/VERSION
+          sed -i 's|"version": *".*"|"version": "${{ steps.latest.outputs.tag }}"|' Apps/pihole-unbound/config.json
+          sed -i 's|FROM pihole/pihole:.*|FROM pihole/pihole:${{ steps.latest.outputs.tag }}|' Apps/pihole-unbound/Dockerfile
+
+          docker build -t test-pihole -f Apps/pihole-unbound/Dockerfile Apps/pihole-unbound
+
+          git commit -am "chore: update Pi-hole to version ${{ steps.latest.outputs.tag }}"
+          git push origin $BRANCH
+
+      - name: Create Pull Request to upstream
+        id: create_pr
+        run: |
+          PR_URL=$(gh pr create --title "Update Pi-hole to ${{ steps.latest.outputs.tag }}" \
+                                --body "Automated PR to update Pi-hole to version ${{ steps.latest.outputs.tag }}." \
+                                --head elulcao:${{ steps.set_branch.outputs.branch }} \
+                                --base main \
+                                --repo bigbeartechworld/big-bear-docker-images)
+          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
