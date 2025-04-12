@@ -44,6 +44,7 @@ jobs:
           else
             echo "No update needed"
             echo "update_needed=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Exit if no update needed
         if: steps.compare.outputs.update_needed == 'false'
