@@ -17,6 +17,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Sync fork main with upstream
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.GH_SYNC_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/elulcao/big-bear-docker-images/merge-upstream \
+            -d '{"branch":"main"}'
+
       - name: Get latest Docker tag
         id: latest
         run: |
@@ -55,13 +63,6 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-      - name: Add upstream and sync main
-        run: |
-          git remote add upstream https://github.com/bigbeartechworld/big-bear-docker-images.git
-          git fetch upstream
-          git checkout main
-          git merge upstream/main || echo "Nothing to merge"
-
       - name: Create new branch and update version in files
         id: set_branch
         run: |
@@ -77,7 +78,7 @@ jobs:
           docker build -t test-pihole -f Apps/pihole-unbound/Dockerfile Apps/pihole-unbound
 
           git commit -am "chore: update Pi-hole to version ${{ steps.latest.outputs.tag }}"
-          git pull origin $BRANCH --rebase
+          git pull origin $BRANCH --rebase || echo "No remote branch yet, continuing"
           git push origin $BRANCH
 
       - name: Create Pull Request to upstream
