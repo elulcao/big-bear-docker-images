@@ -20,7 +20,7 @@ jobs:
       - name: Sync fork main with upstream
         run: |
           curl -X POST \
-            -H "Authorization: Bearer ${{ secrets.GH_SYNC_TOKEN }}" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/elulcao/big-bear-docker-images/merge-upstream \
             -d '{"branch":"main"}'
@@ -63,6 +63,34 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
+      - name: Check if remote branch or PR already exists
+        id: check_remote
+        run: |
+          BRANCH="update-pihole-${{ steps.latest.outputs.tag }}"
+
+          if git ls-remote --exit-code --heads origin "$BRANCH"; then
+            echo "Remote branch $BRANCH exists."
+
+            PR_EXISTS=$(gh pr list --head "$BRANCH" --json number --jq '.[0]')
+            if [ -n "$PR_EXISTS" ]; then
+              echo "PR already exists for $BRANCH."
+              echo "skip_update=true" >> $GITHUB_OUTPUT
+            else
+              echo "No PR found, deleting branch $BRANCH"
+              git push origin --delete "$BRANCH"
+              echo "skip_update=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "Remote branch $BRANCH does not exist."
+            echo "skip_update=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Exit if update should be skipped
+        if: steps.check_remote.outputs.skip_update == 'true'
+        run: exit 0
+
       - name: Create new branch and update version in files
         id: set_branch
         run: |
@@ -93,12 +121,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create Issue (optional notification)
+      - name: Create Issue (notification)
         if: steps.compare.outputs.update_needed == 'true'
         run: |
           gh issue create \
             --title "📢 New Pi-hole Version: ${{ steps.latest.outputs.tag }}" \
-            --body "A new version of Pi-hole was detected and a PR was created for it." \
+            --body "A new version of Pi-hole was detected and a PR was created: [${{ steps.create_pr.outputs.pr_url }}](${{ steps.create_pr.outputs.pr_url }})" \
             --repo ${{ github.repository }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
