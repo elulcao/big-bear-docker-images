@@ -92,3 +92,13 @@ jobs:
           echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Issue (optional notification)
+        if: steps.compare.outputs.update_needed == 'true'
+        run: |
+          gh issue create \
+            --title "📢 New Pi-hole Version: ${{ steps.latest.outputs.tag }}" \
+            --body "A new version of Pi-hole was detected and a PR was created for it." \
+            --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
