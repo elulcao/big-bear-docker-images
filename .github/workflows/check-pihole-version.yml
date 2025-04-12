@@ -20,7 +20,11 @@ jobs:
       - name: Get latest Docker tag
         id: latest
         run: |
-          LATEST_TAG=$(curl -s https://registry.hub.docker.com/v1/repositories/${{ env.IMAGE_NAME }}/tags | jq -r '.[].name' | sort -V | grep -vE '.*(dev|beta|rc).*' | tail -n 1)
+          LATEST_TAG=$(curl -s "https://registry.hub.docker.com/v2/repositories/pihole/pihole/tags?page_size=100" \
+            | jq -r '.results[].name' \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V \
+            | tail -n 1)
           echo "Latest tag: $LATEST_TAG"
           echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
 
