@@ -81,14 +81,14 @@ jobs:
           git pull origin $BRANCH --rebase || echo "No remote branch yet, continuing"
           git push origin $BRANCH
 
-      - name: Create Pull Request to upstream
+      - name: Create Pull Request in your fork
         id: create_pr
         run: |
           PR_URL=$(gh pr create --title "Update Pi-hole to ${{ steps.latest.outputs.tag }}" \
                                 --body "Automated PR to update Pi-hole to version ${{ steps.latest.outputs.tag }}." \
-                                --head elulcao:${{ steps.set_branch.outputs.branch }} \
+                                --head ${{ steps.set_branch.outputs.branch }} \
                                 --base main \
-                                --repo bigbeartechworld/big-bear-docker-images)
+                                --repo ${{ github.repository }})
           echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
